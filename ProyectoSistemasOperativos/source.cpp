@@ -92,13 +92,97 @@ void FIFO()
             }
         }
         if (programQueue.empty() && current.empty())
-            completed;
+            completed = true;
         counter++;
     }
 }
 
+void RR()
+{
+    queue<Program> programQueue;
+    int input = 1;
+    const int quantum = 2;
+
+    // Collect programs
+    do
+    {
+        programQueue.push(PrgCreate());
+        cout << "Quieres agregar otro programa? \n1. Si \n0. No" << endl;
+        cin >> input;
+    } while (input != 0);
+
+    // Sort by arrival
+    set<Program, CompareByPriority> sortedSet;
+    while (!programQueue.empty())
+    {
+        sortedSet.insert(programQueue.front());
+        programQueue.pop();
+    }
+
+    for (const Program& element : sortedSet)
+    {
+        programQueue.push(element);
+    }
+
+    deque<Program> readyQueue;
+    int counter = 0;
+    bool completed = false;
+
+    while (!completed)
+    {
+        // Move newly arrived programs to the ready queue
+        while (!programQueue.empty() && programQueue.front().llegada <= counter)
+        {
+            readyQueue.push_back(programQueue.front());
+            programQueue.pop();
+        }
+
+        // Execute the front of the ready queue
+        if (!readyQueue.empty())
+        {
+            Program current = readyQueue.front();
+            readyQueue.pop_front();
+
+            int executed = min(quantum, current.rafagas);
+            for (int i = 0; i < executed; ++i)
+            {
+                // Simulate one unit of execution
+                current.rafagas--;
+                counter++;
+
+                // During execution, check for new arrivals
+                while (!programQueue.empty() && programQueue.front().llegada <= counter)
+                {
+                    readyQueue.push_back(programQueue.front());
+                    programQueue.pop();
+                }
+            }
+
+            // If program not finished, put it back in the queue
+            if (current.rafagas > 0)
+            {
+                readyQueue.push_back(current);
+            }
+            else
+            {
+                cout << "Terminado: " << current.programa << " en tiempo " << counter << endl;
+            }
+        }
+        else
+        {
+            // If no one is ready, time passes
+            counter++;
+        }
+
+        // End condition
+        if (programQueue.empty() && readyQueue.empty())
+            completed = true;
+    }
+}
+
+
 int main()
 {
-    FIFO();
+    RR();
     return 0;
 }
