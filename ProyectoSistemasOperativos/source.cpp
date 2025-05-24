@@ -4,6 +4,7 @@
 #include <string>
 #include <list>
 #include <set>
+#include <fstream>
 
 using namespace std;
 
@@ -179,8 +180,134 @@ void RR()
             completed = true;
     }
 }
+struct info {
+    string nombre;
+    string dueño;
+    int tam;
+    string permisos;
+};
+/*
+void crear_archivo() {
+    string nombre;
+    cout << "Nombre del archivo: ";
+    cin >> nombre;
 
+    ofstream archivo(nombre); // crea el archivo
+    if (archivo) 
+    {
+        cout << "Archivo creado: " << nombre << endl;
+        archivo.close(); //cierrra el archivo y libera recursos 
+    }
+    else 
+    {
+        cout << "No se pudo crear el archivo \n";
+    }
+}
 
+void leer_archivo()
+{
+    string nombre, linea;
+
+    cout << "Nombre del archivo: ";
+    cin >> nombre;
+
+    ifstream archivo(nombre);
+    if (archivo) 
+    {
+        cout << "Contenido del archivo:\n";
+
+        while (getline(archivo, linea)) 
+        {
+            cout << linea << endl;
+        }
+
+        archivo.close();
+    }
+    else 
+    {
+        cout << "No se pudo abrir el archivo.\n";
+    }
+}
+
+void escribir_Archivo() 
+{
+    string nombre, texto;
+
+    cout << "Nombre del archivo: ";
+    cin >> nombre;
+
+    cout << "Escribe el texto: ";
+    cin.ignore(); 
+    getline(cin, texto);
+
+    ofstream archivo(nombre, ios::app); // agregar
+    if (archivo) 
+    {
+        archivo << texto << endl;
+        cout << "se guardo el texto \n";
+        archivo.close();
+    }
+    else {
+        cout << "No se pudo escribir en el archivo.\n";
+    }
+}
+*/
+void crear_archivo() {
+    string nombre;
+    cout << "Nombre del archivo: ";
+    cin >> nombre;
+
+    int fd = open(nombre.c_str(), O_CREAT | O_WRONLY, 0644); // crea archivo
+    if (fd != -1) {
+        cout << "Archivo creado: " << nombre << endl;
+        close(fd); // cierra el archivo
+    }
+    else {
+        cout << "No se pudo crear el archivo\n";
+    }
+}
+
+void escribir_archivo() {
+    string nombre, texto;
+    cout << "Nombre del archivo: ";
+    cin >> nombre;
+    cin.ignore(); // limpia buffer
+
+    cout << "Escribe el texto: ";
+    getline(cin, texto);
+
+    int fd = open(nombre.c_str(), O_WRONLY | O_APPEND);
+    if (fd != -1) {
+        write(fd, texto.c_str(), texto.length());
+        write(fd, "\n", 1);
+        cout << "Texto guardado.\n";
+        close(fd);
+    }
+    else {
+        cout << "No se pudo escribir en el archivo\n";
+    }
+}
+
+void leer_archivo() {
+    string nombre;
+    cout << "Nombre del archivo: ";
+    cin >> nombre;
+
+    int fd = open(nombre.c_str(), O_RDONLY);
+    if (fd != -1) {
+        char buffer[1024];
+        int bytes;
+        cout << "Contenido del archivo:\n";
+        while ((bytes = read(fd, buffer, sizeof(buffer) - 1)) > 0) {
+            buffer[bytes] = '\0';
+            cout << buffer;
+        }
+        close(fd);
+    }
+    else {
+        cout << "No se pudo abrir el archivo\n";
+    }
+}
 int main()
 {
     RR();
