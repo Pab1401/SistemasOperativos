@@ -1,315 +1,509 @@
-#include <iostream>
-#include <queue>
+#include <iostream> //Entrada/salida de consola
+#include <fstream>  
+#include <queue>    //Cola FIFO (queue)
+#include <deque>    
+#include <set>  //Conjuntos ordenados
+#include <string>   //Uso de strings para validar varios caracteres
+#include <unordered_map>
 #include <vector>
-#include <string>
-#include <list>
-#include <set>
-#include <fstream>
+#include <sys/types.h>   // Para pid_t
+#include <unistd.h>      // Para fork(), exec()
+#include <signal.h>      // Para kill() y señales (SIGSTOP, SIGCONT, etc)
+#include <sys/wait.h>    // Para wait() 
+
 
 using namespace std;
 
-struct Program
-{
-    string programa;
-    int rafagas;
-    int llegada;
+// ========== ESTRUCTURA DE USUARIO ==========
+struct Usuario {
+    string nombre;
+    string tipo; // "root" o "user"
 };
 
-// Output formatting
-ostream& operator<<(ostream& os, const Program& p)
-{
-    os << "Programa: " << p.programa << ", Rafagas: " << p.rafagas << ", Llegada: " << p.llegada;
-    return os;
-}
+// ========== ESTRUCTURA DE PROCESOS ==========
+//Nombre del programa,Cantidad de ciclos que se necesitan ejecutarse,En que momento llega al sistema
+struct Program {
+    //string programa; 
+    //int rafagas; 
+    //int llegada;    
 
-// Sort by arrival time (llegada)
+    string programa;
+    int rafagas = 0;
+    int llegada = 0;
+
+    Program() = default;
+
+    Program(string p, int r, int l) : programa(p), rafagas(r), llegada(l) {}
+};
+
+//Sobrecarga del operador
+ostream& operator<<(ostream& os, const Program& p) { // es el objeto Program que queremos imprimir
+    os << "Programa: " << p.programa << ", Rafagas: " << p.rafagas << ", Llegada: " << p.llegada;
+    return os; //se retorna "os" para encadenar impresiones
+}
+//Ejemplo: de retorno-> Programa: Paint, Rafagas: 4, Llegada: 2
+
+//Define como se ordenan los programas en un set, se ordenan por el tiempo de llegada! de menor a mayor.
 struct CompareByPriority {
     bool operator()(const Program& a, const Program& b) const {
         return a.llegada < b.llegada;
     }
 };
 
-// Input function
-Program PrgCreate()
-{
-    system("cls");
+//Se piden los datos
+Program PrgCreate() {
     Program temp;
-    cout << "Menciona el nombre del programa: ";
+    cout << "Nombre del programa: ";
     cin >> temp.programa;
-    cout << "Cual es el numero de rafagas necesarias para el proyecto: ";
+    cout << "Numero de rafagas necesarias: ";
     cin >> temp.rafagas;
-    cout << "Cual es la llegada del programa: ";
+    cout << "Tiempo de llegada: ";
     cin >> temp.llegada;
     return temp;
 }
 
-// Main algorithm
-void FIFO()
-{
+//Se agregan los procesos en una cola, según el proceso seleccionado 
+void FIFO() {
     queue<Program> programQueue;
     int input = 1;
 
-    do
-    {
+    do {
         programQueue.push(PrgCreate());
-        cout << "Quieres agregar otro programa? \n1. Si \n0. No" << endl;
+        cout << "¿Deseas agregar otro programa? (1=Sí, 0=No): ";
         cin >> input;
     } while (input != 0);
 
-    // Sort by arrival
+    //Los procesos primero se ordenan por orden de llegada, luego se reinsertan en una nueva cola donde estaran los procesos en orden creciente de tiempo de llegada.
     set<Program, CompareByPriority> sortedSet;
-    while (!programQueue.empty())
-    {
+    while (!programQueue.empty()) {
         sortedSet.insert(programQueue.front());
         programQueue.pop();
     }
 
-    // Display sorted programs
-    for (const Program& element : sortedSet)
-    {
-        programQueue.push(element);
+    for (const Program& p : sortedSet) {
+        programQueue.push(p);
     }
 
+    //Cada ciclo while representa una unidad de tiempo; cuando cel tiempo (counter) coincide con la llegada del proceso se mueve a la cola current
     queue<Program> current;
     int counter = 0;
-    cout << programQueue.empty() << endl;
     bool completed = false;
-    while (!completed)
-    {
-        if (!programQueue.empty())
-        {
-            if (programQueue.front().llegada == counter)
-            {
-                current.push(programQueue.front());
-                programQueue.pop();
-            }
+
+    while (!completed) {
+        if (!programQueue.empty() && programQueue.front().llegada == counter) {
+            current.push(programQueue.front());
+            programQueue.pop();
         }
-        if (!current.empty())
-        {
-            current.front().rafagas--;
+
+        if (!current.empty()) {
+            current.front().rafagas--; //se reduce la cantidad de rafagas hasta llegar a cero
             if (current.front().rafagas == 0) {
-                cout << current.front().programa << endl;
+                cout << "Finalizado: " << current.front().programa << endl;
                 current.pop();
             }
+            //se muestra cuado se finaliza el proceso
         }
+
         if (programQueue.empty() && current.empty())
             completed = true;
+
         counter++;
     }
 }
 
-void RR()
-{
+//RR ejecuta un quantum de tiempo por proceso(máximo 2 unidades).Si el proceso no termina, vuelve al final de la cola. Si termina, se notifica con cout.
+void RR() {
     queue<Program> programQueue;
     int input = 1;
     const int quantum = 2;
 
-    // Collect programs
-    do
-    {
+    do {
         programQueue.push(PrgCreate());
-        cout << "Quieres agregar otro programa? \n1. Si \n0. No" << endl;
+        cout << "¿Agregar otro programa? (1=Si, 0=No): ";
         cin >> input;
     } while (input != 0);
 
-    // Sort by arrival
     set<Program, CompareByPriority> sortedSet;
-    while (!programQueue.empty())
-    {
+    while (!programQueue.empty()) {
         sortedSet.insert(programQueue.front());
         programQueue.pop();
     }
 
-    for (const Program& element : sortedSet)
-    {
-        programQueue.push(element);
+    for (const Program& p : sortedSet) {
+        programQueue.push(p);
     }
 
     deque<Program> readyQueue;
     int counter = 0;
     bool completed = false;
 
-    while (!completed)
-    {
-        // Move newly arrived programs to the ready queue
-        while (!programQueue.empty() && programQueue.front().llegada <= counter)
-        {
+    while (!completed) {
+        while (!programQueue.empty() && programQueue.front().llegada <= counter) {
             readyQueue.push_back(programQueue.front());
             programQueue.pop();
         }
 
-        // Execute the front of the ready queue
-        if (!readyQueue.empty())
-        {
+        if (!readyQueue.empty()) {
             Program current = readyQueue.front();
             readyQueue.pop_front();
 
             int executed = min(quantum, current.rafagas);
-            for (int i = 0; i < executed; ++i)
-            {
-                // Simulate one unit of execution
+            for (int i = 0; i < executed; ++i) {
                 current.rafagas--;
                 counter++;
 
-                // During execution, check for new arrivals
-                while (!programQueue.empty() && programQueue.front().llegada <= counter)
-                {
+                while (!programQueue.empty() && programQueue.front().llegada <= counter) {
                     readyQueue.push_back(programQueue.front());
                     programQueue.pop();
                 }
             }
 
-            // If program not finished, put it back in the queue
-            if (current.rafagas > 0)
-            {
+            if (current.rafagas > 0) {
                 readyQueue.push_back(current);
             }
-            else
-            {
-                cout << "Terminado: " << current.programa << " en tiempo " << counter << endl;
+            else {
+                cout << "Finalizado: " << current.programa << " en tiempo " << counter << endl;
             }
         }
-        else
-        {
-            // If no one is ready, time passes
+        else {
             counter++;
         }
 
-        // End condition
         if (programQueue.empty() && readyQueue.empty())
             completed = true;
     }
 }
-struct info {
+
+// ========== SISTEMA DE ARCHIVOS ==========
+//Crea un archivo con permisos y propietario
+class Archivo {
+private:
     string nombre;
-    string dueño;
-    int tam;
-    string permisos;
+    string propietario;
+    string permisos; // r (permiso de lectura), w(permisos de escritura), rw (permisos de lectura y escritura combinados)
+
+public:
+    Archivo(string _nombre, string _propietario, string _permisos)
+        : nombre(_nombre), propietario(_propietario), permisos(_permisos) {
+    }
+
+    void crear() {
+        ofstream archivo(nombre);
+        if (archivo.is_open()) {
+            archivo << "META:" << propietario << ":" << permisos << "\n";
+            archivo.close();
+            cout << "Archivo creado: " << nombre << endl;
+        }
+    }
+
+    void escribir(string usuario, string contenido) {
+        if (usuario == propietario || permisos.find('w') != string::npos || usuario == "root") {
+            ofstream archivo(nombre, ios::app);
+            archivo << usuario << ": " << contenido << "\n";
+            archivo.close();
+            cout << "Escritura exitosa.\n";
+        }
+        else {
+            cout << "Permiso denegado para escribir en el archivo.\n";
+        }
+    }
+
+    void leer(string usuario) {
+        if (usuario == propietario || permisos.find('r') != string::npos || usuario == "root") {
+            ifstream archivo(nombre);
+            string linea;
+            while (getline(archivo, linea)) {
+                cout << linea << endl;
+            }
+            archivo.close();
+        }
+        else {
+            cout << "Permiso denegado para leer el archivo.\n";
+        }
+    }
+
+    void cerrar() {
+        cout << "Archivo cerrado (simulado).\n";
+    }
 };
-/*
-void crear_archivo() {
-    string nombre;
+
+unordered_map<string, Archivo*> sistemaArchivos;
+
+// Pide nombre, permisos y lo agrega a "unordered_map" llamado "sistemaArchivos"
+void crearArchivo(string usuario) {
+    string nombre, permisos;
     cout << "Nombre del archivo: ";
     cin >> nombre;
+    cout << "Permisos (r, w, rw): ";
+    cin >> permisos;
 
-    ofstream archivo(nombre); // crea el archivo
-    if (archivo) 
-    {
-        cout << "Archivo creado: " << nombre << endl;
-        archivo.close(); //cierrra el archivo y libera recursos 
+    Archivo* nuevo = new Archivo(nombre, usuario, permisos);
+    nuevo->crear();
+    sistemaArchivos[nombre] = nuevo;
+}
+
+//Cada opción verifica si el archivo existe y si el usuario tiene permisos adecuados.
+void menuArchivos(string usuario) {
+    int opcion;
+    string nombre, contenido;
+
+    do {
+        cout << "\n--- MENÚ ARCHIVOS ---\n";
+        cout << "1. Crear archivo\n2. Leer archivo\n3. Escribir archivo\n4. Cerrar archivo\n5. Volver\n";
+        cin >> opcion;
+
+        switch (opcion) {
+        case 1:
+            crearArchivo(usuario);
+            break;
+        case 2:
+            cout << "Nombre del archivo a leer: ";
+            cin >> nombre;
+            if (sistemaArchivos.count(nombre)) {
+                sistemaArchivos[nombre]->leer(usuario);
+            }
+            else {
+                cout << "Archivo no existe.\n";
+            }
+            break;
+        case 3:
+            cout << "Nombre del archivo a escribir: ";
+            cin >> nombre;
+            cin.ignore();
+            cout << "Contenido: ";
+            getline(cin, contenido);
+            if (sistemaArchivos.count(nombre)) {
+                sistemaArchivos[nombre]->escribir(usuario, contenido);
+            }
+            else {
+                cout << "Archivo no existe.\n";
+            }
+            break;
+        case 4:
+            cout << "Nombre del archivo a cerrar: ";
+            cin >> nombre;
+            if (sistemaArchivos.count(nombre)) {
+                sistemaArchivos[nombre]->cerrar();
+            }
+            else {
+                cout << "Archivo no existe.\n";
+            }
+            break;
+        }
+    } while (opcion != 5);
+}
+
+
+
+
+// pproceso real
+struct Proceso
+{
+    pid_t pid;
+    string nombre;
+    string estado;
+};
+
+vector<Proceso> procesos;
+
+void crearProceso()
+{
+    string nombre;
+    cout << "Nombre simbólico del proceso: ";
+    cin >> nombre;
+
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        // Hijo
+        cout << "Soy el hijo con PID: " << getpid() << endl;
+        // Espera un comando del padre
+        pause(); // Detiene al hijo hasta que reciba una señal
+        exit(0);
     }
-    else 
+    else if (pid > 0)
     {
-        cout << "No se pudo crear el archivo \n";
+        // Padre
+        Proceso nuevo{ pid, nombre, "suspended" };
+        procesos.push_back(nuevo);
+        cout << "Proceso creado con PID: " << pid << " y suspendido." << endl;
+        kill(pid, SIGSTOP); // Suspende de inmediato
+    }
+    else
+    {
+        cerr << "Error al crear el proceso." << endl;
     }
 }
 
-void leer_archivo()
+void ejecutarProceso()
 {
-    string nombre, linea;
+    int index;
+    cout << "Selecciona el índice del proceso a ejecutar: ";
+    cin >> index;
 
-    cout << "Nombre del archivo: ";
-    cin >> nombre;
+    if (index >= 0 && index < procesos.size()) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            execlp("ls", "ls", "-l", NULL); // Reemplaza por otro si quieres
+            perror("Error al ejecutar exec");
+            exit(1);
+        }
+        else {
+            cout << "Ejecutando comando en hijo con PID: " << pid << endl;
+            waitpid(pid, NULL, 0);
+        }
+    }
+    else {
+        cout << "Índice inválido." << endl;
+    }
+}
 
-    ifstream archivo(nombre);
-    if (archivo) 
+void esperarProcesos() {
+    for (auto& p : procesos)
     {
-        cout << "Contenido del archivo:\n";
-
-        while (getline(archivo, linea)) 
+        int status;
+        waitpid(p.pid, &status, WNOHANG);
+        if (WIFEXITED(status))
         {
-            cout << linea << endl;
+            p.estado = "terminated";
+            cout << "Proceso " << p.nombre << " ha terminado." << endl;
+        }
+    }
+}
+
+void suspenderProceso()
+{
+    int index;
+    cout << "Índice del proceso a suspender: ";
+    cin >> index;
+    if (index >= 0 && index < procesos.size())
+    {
+        kill(procesos[index].pid, SIGSTOP);
+        procesos[index].estado = "suspended";
+        cout << "Proceso suspendido." << endl;
+    }
+    else {
+        cout << "Índice inválido." << endl;
+    }
+}
+
+void reanudarProceso()
+{
+    int index;
+    cout << "Índice del proceso a reanudar: ";
+    cin >> index;
+    if (index >= 0 && index < procesos.size())
+    {
+        kill(procesos[index].pid, SIGCONT);
+        procesos[index].estado = "running";
+        cout << "Proceso reanudado." << endl;
+    }
+    else {
+        cout << "Índice inválido." << endl;
+    }
+}
+
+void terminarProceso()
+{
+    int index;
+    cout << "Índice del proceso a terminar: ";
+    cin >> index;
+    if (index >= 0 && index < procesos.size())
+    {
+        kill(procesos[index].pid, SIGKILL);
+        procesos[index].estado = "terminated";
+        cout << "Proceso terminado." << endl;
+    }
+    else {
+        cout << "Índice inválido." << endl;
+    }
+}
+
+void mostrarProcesos()
+{
+    cout << "\nLista de procesos:\n";
+    for (int i = 0; i < procesos.size(); i++) {
+        cout << i << ". PID: " << procesos[i].pid
+            << ", Nombre: " << procesos[i].nombre
+            << ", Estado: " << procesos[i].estado << endl;
+    }
+}
+
+void menuProcesosReales()
+{
+    int opcion;
+    do {
+        cout << "\n--- Gestión de Procesos Reales ---\n";
+        cout << "1. Crear proceso\n";
+        cout << "2. Ejecutar comando (ls -l)\n";
+        cout << "3. Esperar procesos\n";
+        cout << "4. Suspender proceso\n";
+        cout << "5. Reanudar proceso\n";
+        cout << "6. Terminar proceso\n";
+        cout << "7. Mostrar procesos\n";
+        cout << "0. Salir al menú principal\n";
+        cout << "Opción: ";
+        cin >> opcion;
+
+        switch (opcion)
+        {
+        case 1: crearProceso(); break;
+        case 2: ejecutarProceso(); break;
+        case 3: esperarProcesos(); break;
+        case 4: suspenderProceso(); break;
+        case 5: reanudarProceso(); break;
+        case 6: terminarProceso(); break;
+        case 7: mostrarProcesos(); break;
         }
 
-        archivo.close();
-    }
-    else 
-    {
-        cout << "No se pudo abrir el archivo.\n";
-    }
+    } while (opcion != 0);
 }
 
-void escribir_Archivo() 
-{
-    string nombre, texto;
 
-    cout << "Nombre del archivo: ";
-    cin >> nombre;
-
-    cout << "Escribe el texto: ";
-    cin.ignore(); 
-    getline(cin, texto);
-
-    ofstream archivo(nombre, ios::app); // agregar
-    if (archivo) 
-    {
-        archivo << texto << endl;
-        cout << "se guardo el texto \n";
-        archivo.close();
-    }
-    else {
-        cout << "No se pudo escribir en el archivo.\n";
-    }
-}
-*/
-void crear_archivo() {
-    string nombre;
-    cout << "Nombre del archivo: ";
-    cin >> nombre;
-
-    int fd = open(nombre.c_str(), O_CREAT | O_WRONLY, 0644); // crea archivo
-    if (fd != -1) {
-        cout << "Archivo creado: " << nombre << endl;
-        close(fd); // cierra el archivo
-    }
-    else {
-        cout << "No se pudo crear el archivo\n";
-    }
+// ========== LOGIN Y MENÚ PRINCIPAL ==========
+//root o user, controla permisos en archivos
+Usuario login() {
+    Usuario u;
+    cout << "---- LOGIN ----\n";
+    cout << "Usuario: ";
+    cin >> u.nombre;
+    cout << "Tipo (root/user): ";
+    cin >> u.tipo;
+    return u;
 }
 
-void escribir_archivo() {
-    string nombre, texto;
-    cout << "Nombre del archivo: ";
-    cin >> nombre;
-    cin.ignore(); // limpia buffer
+//Menu principal del sistema
+int main() {
+    Usuario actual = login();
+    int opcion;
 
-    cout << "Escribe el texto: ";
-    getline(cin, texto);
+    do {
+        cout << "\n=== SISTEMA OPERATIVO SIMULADO ===\n";
+        cout << "1. FIFO\n2. Round Robin\n3. Sistema de Archivos\n4. gestion de procesos reales\n5. Salir\n";
+        cout << "Seleccione una opcion: ";
+        cin >> opcion;
 
-    int fd = open(nombre.c_str(), O_WRONLY | O_APPEND);
-    if (fd != -1) {
-        write(fd, texto.c_str(), texto.length());
-        write(fd, "\n", 1);
-        cout << "Texto guardado.\n";
-        close(fd);
-    }
-    else {
-        cout << "No se pudo escribir en el archivo\n";
-    }
-}
-
-void leer_archivo() {
-    string nombre;
-    cout << "Nombre del archivo: ";
-    cin >> nombre;
-
-    int fd = open(nombre.c_str(), O_RDONLY);
-    if (fd != -1) {
-        char buffer[1024];
-        int bytes;
-        cout << "Contenido del archivo:\n";
-        while ((bytes = read(fd, buffer, sizeof(buffer) - 1)) > 0) {
-            buffer[bytes] = '\0';
-            cout << buffer;
+        switch (opcion) {
+        case 1:
+            FIFO();
+            break;
+        case 2:
+            RR();
+            break;
+        case 3:
+            menuArchivos(actual.nombre);
+            break;
+        case 4:
+            menuProcesosReales();
+            break;
+        case 5:
+            cout << "Saliendo del sistema...\n";
+            break;
+        default:
+            cout << "Opcion invalida.\n";
         }
-        close(fd);
-    }
-    else {
-        cout << "No se pudo abrir el archivo\n";
-    }
-}
-int main()
-{
-    RR();
-    return 0;
+
+    } while (opcion != 4);
+
+    return 0;
 }
